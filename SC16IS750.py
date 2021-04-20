@@ -2,8 +2,6 @@ import smbus
 from enum import IntEnum
 
 class SC16IS750:
-    self.DEVICE_ADDRESS = 0x9A
-    CrystalFrequency = 0
     class registers(IntEnum):
         RHR= 0x00       # Receive Holding Register (R)
         THR= 0x00       # Transmit Holding Register (W)
@@ -36,12 +34,10 @@ class SC16IS750:
         XOFF1= 0x06     # XOff1 (R/W)
         XOFF2= 0x07     # XOff2 (R/W)
 
-    def init(self, crystalFrequency, deviceaddress=0x9A):
-        print("Initalising SC16IS750.")
+    def init(self, crystalFrequency=14745600, deviceaddress=0x90):
         self.DEVICE_ADDRESS = deviceaddress
         self.bus = smbus.SMBus(1)
         self.crystalFrequency = crystalFrequency
-#        def __init__():
 
     def readRegister(self, registerAddress):
         shiftedDeviceAddress = self.DEVICE_ADDRESS >> 1
@@ -76,7 +72,32 @@ class SC16IS750:
     ##Set the desired UART attributes##
     def setUARTAttributes(self, dataBits, parityType, stopBits):
         #Calculate bits for LCR register#
-        print("Setting UART attributes.")
+
+        if dataBits == 5:
+            newLcr = 0b00
+        elif dataBits == 6:
+            newLcr = 0b01
+        elif dataBits == 7:
+            newLcr = 0b10
+        elif dataBits == 8:
+            newLcr = 0b11
+
+        if stopBits > 1:
+            newLcr |= (0b1 << 2)
+
+        if parityType == 'N':
+            pass
+        elif parityType == 'O':
+            newLcr |= (0b001 << 3)
+        elif parityType == 'E':
+            newLcr |= (0b011 << 3)
+        elif parityType == 'M':
+            newLcr |= (0b101 << 3)
+        elif parityType == 'S':
+            newLcr |= (0b111 << 3)
+
+        self.writeRegister(self.registers.LCR,newLcr)
+
 
     ##Set the bit in position passed##
     def setRegisterBit(self, registerAddress, registerBit):
@@ -90,13 +111,15 @@ class SC16IS750:
         updated = current & ~(1 << registerBit)
         self.writeRegister(registerAddress, updated)
 
+    ##Peek Register Bit##
+    def peekRegisterBit(self, registerAddress, registerBit):
+        current = self.readRegister(registerAddress)
+        return current & (1 << registerBit) != 0
+
+
     ##Checks if any data in FIFO buffer##
     def isDataWaiting(self):
-        register = self.readRegister(self.registers.LSR)
-        isWaiting = register & 0b1
-        if(isWaiting):
-            return True
-        return False
+        return self.peekRegisterBit(self.registers.LSR,0)
 
     ##Checks number of bytes waiting in FIFO buffer##
     def dataWaiting(self):
@@ -110,11 +133,28 @@ class SC16IS750:
         return True            
 
 
+    ## Write a single byte##
+    def writeInt(self,byte):
+        while self.peekRegisterBit(self.registers.LSR,5):
+                break
+
+        self.writeRegister(self.registers.THR,byte)
 
 
+    ##Read a single byte##
+    def readInt(self):
+        return self.readRegister(self.registers.RHR)
 
 
+    ##Enable FIFO System##
+    def enableFifo(self):
+        self.setRegisterBit(self.registers.FCR,0)
 
+    ##Clear RxD FIFO##
+    def clearRxFifo(self):
+        self.setRegisterBit(self.registers.FCR,1)
 
+    ##Clear TxD FIFO##
+    def clearTxFifo(self):
+        self.setRegisterBit(self.registers.FCR,2)
 
-        
